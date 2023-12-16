@@ -2,6 +2,9 @@
 
 ## Taken from the Pico-examples, and expanded
 
+* RP2040 with two 74HC595 `daisy-chained` to drive TFT LCD of 8080 MCU 16-bit bus interface, which can save a lot of pins.
+* The 74HC595 is an 8-bit serial-in, serial or parallel-out shift register with output latches. The have 100 MHz (typical) shift out frequency.
+
 Expanded with:
 * Two shift register 74HC595 daisy chained together to save many pins, which is main purpose of this project.
 * Simultaneously drive two LCDs with different interfaces.
@@ -59,3 +62,5 @@ Expanded with:
 |     VCC    |             |             |      RD      |             |
 |     GND    |             |             |      CS      |     CS      |
 |     GND    |             |             |BL(Low Active)|             |
+
+

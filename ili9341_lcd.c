@@ -127,6 +127,7 @@ static inline void shiftout( uint16_t val,uint8_t bits) {
         // if it is 16, then sending the LCD control command will fail,
         // So it has to be written twice, so that the 16-bit data fills both 74hc595 registers,
         // and then it is written to the LCD memory at once.
+        ili9341_lcd_wait_idle(tft_pio, pio_sm);
         ili9341_lcd_put(tft_pio,pio_sm,val >>8);
 
         ili9341_lcd_wait_idle(tft_pio, pio_sm);
