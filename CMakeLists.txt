@@ -14,7 +14,11 @@ set(CMAKE_CXX_STANDARD 17)
 
 pico_sdk_init()
 
-if(${USE_BIT_BANGING} EQUAL 1 OR ${USE_BIT_BANGING} EQUAL ON )
+if(NOT USE_BIT_BANGING)
+    set(USE_BIT_BANGING 0)
+endif()
+
+if(${USE_BIT_BANGING} EQUAL 1 )
 	add_definitions(-DUSE_BIT_BANGING=1)
     target_link_libraries(${PROJECT} PRIVATE pico_stdlib hardware_interp)
 else()
@@ -25,7 +29,7 @@ else()
 endif()
 
 
-# set(CMAKE_VERBOSE_MAKEFILE ON)
+set(CMAKE_VERBOSE_MAKEFILE ON)
 
 
 target_sources(${PROJECT} PRIVATE ili9341_lcd.c)

@@ -27,9 +27,12 @@
 #include "hardware/pio_instructions.h"
 #include "ili9341_lcd.pio.h"
 #else
-#define LSBFIRST            0
-#define MSBFIRST            1
+#define LSBFIRST 0
+#define MSBFIRST 1
+
+uint8_t bitOrder = MSBFIRST;
 #endif
+
 
 // ili9341  common registers
 #define CASET               0x2A
@@ -43,12 +46,26 @@
 #define IMAGE_SIZE          256
 #define LOG_IMAGE_SIZE      8
 
-#define PIN_DIN             0     // For 74hc595n connect to DS,      For SPI TFT LCD connect to SDI(MOSI)
+#define PIN_DOUT            0     // For 74hc595n connect to DS,      For SPI TFT LCD connect to SDI(MOSI)
 #define PIN_CLK             1     // For 74hc595n connect to SHCP,    For SPI TFT LCD connect to SCK
 #define PIN_RS              2     // For Parallel LCD connect to RS,  For SPI TFT LCD connect to DC
 #define PIN_WR              3     // For Parallel LCD connect to WR
 #define PIN_RESET           4     // For Parallel LCD connect to RES, For SPI TFT LCD connect to RES
 #define PIN_LATCH           5     // For 74hc595n connect to STCP
+
+// for 74hc165d
+#define USE_74HC165
+#if defined(USE_74HC165)
+#define PIN_DIN             12   // read from 74hc165 -> LCD
+#define PIN_RD              13
+#define PIN_CP              14   // clock
+#define PIN_PL              15   // active low load
+
+#define READ_ID1            0xDA
+#define READ_ID2            0xDB
+#define READ_ID3            0xDC
+#define READ_ID4            0xD3
+#endif
 
 #define SERIAL_CLK_DIV      1.f
 
@@ -108,7 +125,7 @@ void pioinit(uint32_t clock_freq) {
     program_offset = pio_add_program(tft_pio, &ili9341_lcd_program);
     // Configure the state machine
     sm_conf = ili9341_lcd_program_get_default_config(program_offset);
-    ili9341_lcd_program_init(tft_pio, pio_sm, program_offset, PIN_DIN, PIN_CLK, clock_freq);
+    ili9341_lcd_program_init(tft_pio, pio_sm, program_offset, PIN_DOUT, PIN_CLK, clock_freq);
 }
 #endif
 
@@ -134,34 +151,32 @@ static inline void shiftout( uint16_t val,uint8_t bits) {
         ili9341_lcd_put(tft_pio, pio_sm, val);
     }
     ili9341_lcd_wait_idle(tft_pio, pio_sm);
-    gpio_put(PIN_WR, 0);
+
     /* When the latch pin is enabled, the contents of the shift register are copied to the storage/latch register. */
-    gpio_put(PIN_LATCH, 1);
-    /* Just for delay, __asm volatile ("nop\n") not work, but use sleep_us(1) it too long. */
     gpio_put(PIN_LATCH, 1);
     // The host processor provides information during the write cycle
     // when the display module captures the information from host processor on the rising edge of WR.
+    gpio_put(PIN_WR, 0);
     gpio_put(PIN_WR, 1);
 #else
-    uint8_t bitOrder = MSBFIRST;
     uint8_t i;
     uint8_t max_len = bits - 1;
     gpio_put(PIN_LATCH, 0);
     for (i = 0; i < bits; i++) {
         if (bitOrder == MSBFIRST)
         {
-            gpio_put(PIN_DIN, (val & (1 << (max_len - i))) >> (max_len - i));
+            gpio_put(PIN_DOUT, (val & (1 << (max_len - i))) >> (max_len - i));
         } else {
-            gpio_put(PIN_DIN, (val & (1 << i)) >> i);
+            gpio_put(PIN_DOUT, (val & (1 << i)) >> i);
         }
         gpio_put(PIN_CLK, 1);
         gpio_put(PIN_CLK, 0);
     }
+    gpio_put(PIN_LATCH, 1);
+#if defined(USE_74HC165)
+    gpio_put(PIN_LATCH, 1);   // Failure to execute this command to delay will cause the screen to go black.
+#endif
     gpio_put(PIN_WR, 0);
-    gpio_put(PIN_LATCH, 1);
-    /* Just for delay, __asm volatile ("nop\n") not work, if use sleep_us(1) it too long. */
-    gpio_put(PIN_LATCH, 1);
-    gpio_put(PIN_LATCH, 1);
     gpio_put(PIN_WR, 1);
 #endif
 }
@@ -176,6 +191,75 @@ static inline void lcd_send_data(const uint8_t data) {
     gpio_put(PIN_RS, 1);
     shiftout(data, 8);
 }
+
+#if USE_BIT_BANGING == 1 && defined(USE_74HC165)
+
+static inline uint8_t lcd_74hcxxx_test(uint8_t data) {
+    uint8_t value = 0;
+    uint8_t i;
+
+    gpio_put(PIN_LATCH, 0);
+    for (i = 0; i < 8; ++i) {
+        if (bitOrder == MSBFIRST) {
+            gpio_put(PIN_DOUT, (data & (1 << (7 - i))) >> (7 - i));
+        } else {
+            gpio_put(PIN_DOUT, (data & (1 << i)) >> i);
+        }
+        gpio_put(PIN_CLK, 1);
+        gpio_put(PIN_CLK, 0);
+    }
+    gpio_put(PIN_LATCH, 1);
+    gpio_put(PIN_PL, 0);
+    sleep_us(1);       // MCU freq too fast need delay.
+    gpio_put(PIN_PL, 1);
+    sleep_us(1);
+    for (i = 0; i < 8; ++i) {
+        gpio_put(PIN_CP, 0);
+        if (bitOrder == LSBFIRST)
+            value |= gpio_get(PIN_DIN) << i;
+        else
+            value |= gpio_get(PIN_DIN) << (7 - i);
+        gpio_put(PIN_CP, 1);
+        sleep_us(1);
+    }
+    static char text[64];
+    sprintf(text, "TEST Read 74hcxxx , 0x%04x\r\n", value);
+    uart_puts(UART_ID, text);
+    return value;
+}
+
+static inline uint8_t shiftin() {
+    uint8_t value = 0;
+    uint8_t i;
+    gpio_put(PIN_RD, 0);
+    gpio_put(PIN_PL, 0);
+    sleep_us(1);
+    gpio_put(PIN_PL, 1);
+    gpio_put(PIN_RD, 1);
+    for (i = 0; i < 8; ++i) {
+        gpio_put(PIN_CP, 0);
+        if (bitOrder == LSBFIRST)
+            value |= gpio_get(PIN_DIN) << i;
+        else
+            value |= gpio_get(PIN_DIN) << (7 - i);
+        gpio_put(PIN_CP, 1);
+        sleep_us(1);
+    }
+    return value;
+}
+
+static inline uint32_t lcd_read_device_id() {
+    uint32_t id = 0;
+    lcd_send_cmd(READ_ID4);
+    gpio_put(PIN_WR, 1);
+    shiftin();       // dummy data
+    shiftin();       // 0x00
+    id = shiftin();  // 0x93
+    id <<= 8;
+    id |= shiftin(); // 0x41
+    return id;
+}
+#endif
 
 static inline void lcd_write_cmd(const uint8_t *cmd, size_t count) {
     lcd_send_cmd(*cmd++);
@@ -235,16 +319,21 @@ int main() {
     stdio_init_all();
 
     init_uart();
+    sleep_ms(1);
 #if USE_BIT_BANGING == 0
     pioinit(72000000);
-    uart_puts(UART_ID ,"Use PIO driven TFT LCD\n\r");
+    uart_puts(UART_ID ,"Use PIO driven TFT LCD\r\n");
 #else
-    uart_puts(UART_ID, "Use GPIO bit-banging driven TFT LCD\n\r");
-    gpio_init(PIN_DIN);
+    uart_puts(UART_ID, "Use GPIO bit-banging driven TFT LCD\r\n");
+    gpio_init(PIN_DOUT);
     gpio_init(PIN_CLK);
-    gpio_set_dir(PIN_DIN, GPIO_OUT);
+    gpio_set_dir(PIN_DOUT, GPIO_OUT);
     gpio_set_dir(PIN_CLK, GPIO_OUT);
 #endif
+    gpio_init(PIN_RD);
+    gpio_set_dir(PIN_RD, GPIO_OUT);
+    gpio_put(PIN_RD, 1);
+
     gpio_init(PIN_LATCH);
     gpio_set_dir(PIN_LATCH, GPIO_OUT);
 
@@ -258,10 +347,36 @@ int main() {
     gpio_set_dir(PIN_RESET, GPIO_OUT);
 
     gpio_put(PIN_RS, 1);
-    // gpio_put(PIN_WR, 1);
     gpio_put(PIN_RESET, 1);
 
+#if USE_BIT_BANGING == 1 && defined(USE_74HC165)
+    gpio_init(PIN_DIN);
+    gpio_init(PIN_CP);
+    gpio_init(PIN_PL);
+
+    gpio_set_dir(PIN_CP, GPIO_OUT);
+
+    gpio_set_dir(PIN_PL, GPIO_OUT);
+    gpio_set_dir(PIN_DIN, GPIO_IN);
+
+    gpio_put(PIN_PL, 1);
+
+#if 0
+    uint8_t inval[] = {0x43, 0x10, 0xa1, 0x49};
+    for (int i = 0; i < sizeof(inval) / sizeof(uint8_t); i++)
+        lcd_74hcxxx_test(inval[i]);
+#else
+    lcd_send_cmd(0x1);
+    sleep_ms(10);
+    uint32_t device_id = lcd_read_device_id();
+    static char text[64];
+    sprintf(text, "Read TFT LCD device id: 0x%08x\r\n", device_id);
+    uart_puts(UART_ID, text);
+#endif
+#endif
+
     lcd_init(ili9341_init_seq);
+
 
     // Other SDKs: static image on screen, lame, boring
     // Raspberry Pi Pico SDK: spinning image on screen, bold, exciting
