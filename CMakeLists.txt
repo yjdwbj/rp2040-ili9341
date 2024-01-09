@@ -27,12 +27,25 @@ else()
     pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/ili9341_lcd.pio)
     target_link_libraries(${PROJECT} PRIVATE pico_stdlib hardware_pio hardware_interp)
 endif()
-
-
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
+target_include_directories(${PROJECT} PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}
+)
 
-target_sources(${PROJECT} PRIVATE ili9341_lcd.c)
+if (USE_LVGL)
+	add_definitions(-DUSE_LVGL=1)
+    target_link_libraries(${PROJECT} PRIVATE
+            pico_stdlib
+            hardware_pio
+            hardware_interp
+            lvgl
+    )
+    target_sources(${PROJECT} PRIVATE ili9341_lcd.c lv_line_chart.c)
+    add_subdirectory(lvgl)
+else()
+    target_sources(${PROJECT} PRIVATE ili9341_lcd.c)
+endif()
 
 pico_add_extra_outputs(${PROJECT})
 

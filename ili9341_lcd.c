@@ -34,6 +34,7 @@ uint8_t bitOrder = MSBFIRST;
 #endif
 
 
+
 // ili9341  common registers
 #define CASET               0x2A
 #define PASET               0x2B
@@ -75,6 +76,16 @@ uint8_t bitOrder = MSBFIRST;
 
 #define PLL_SYS_KHZ         (133 * 1000)
 
+#ifdef USE_LVGL
+#include "lvgl/lvgl.h"
+#include "lv_conf.h"
+#include "lv_line_chart.h"
+static lv_disp_draw_buf_t draw_buf;
+static lv_color_t buf1[SCREEN_WIDTH * SCREEN_HEIGHT / 10];      /*Declare a buffer for 1/10 screen size*/
+static lv_disp_drv_t disp_drv;                                  /*Descriptor of a display driver*/
+#endif
+static void ili9341_openwindow(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2);
+static inline void lcd_send_cmd(const uint8_t cmd);
 // Format: cmd length (including cmd byte), post delay in units of 5 ms, then cmd payload
 // Note the delays have been shortened a little
 
@@ -86,7 +97,7 @@ static const uint8_t ili9341_init_seq[] = {
     2, 2, 0xF7, 0x20,                                                 // Pump ratio control, DDVDH=2xVCl
     3, 0, 0xEA, 0x00, 0x00,                                           // Driver timing control B
     2, 2, 0x3A, 0x55,                                                 // Set colour mode to 16 bit
-    2, 0, 0x36, 0x08,                                                 // Set MADCTL: row then column, refresh is bottom to top ????
+    2, 0, 0x36, 0x28,                                                 // Set MADCTL: row then column, refresh is bottom to top ????
     5, 0, 0x2A, 0x00, 0x00, SCREEN_WIDTH >> 8, SCREEN_WIDTH & 0xFF,   // CASET: column addresses
     5, 0, 0x2B, 0x00, 0x00, SCREEN_HEIGHT >> 8, SCREEN_HEIGHT & 0xFF, // RASET: row addresses
     3, 2, 0xB1, 0x00, 0x10,                                           // Frame Rate control 119Hz
@@ -94,9 +105,9 @@ static const uint8_t ili9341_init_seq[] = {
     2, 0, 0x26, 0x01,
     16, 0, 0xE0, 0x1F, 0x36, 0x36, 0x3A, 0x0C, 0x05, 0x4F, 0X87, 0x3C, 0x08, 0x11, 0x35, 0x19, 0x13, 0x00,
     16, 0, 0xE1, 0x00, 0x09, 0x09, 0x05, 0x13, 0x0A, 0x30, 0x78, 0x43, 0x07, 0x0E, 0x0A, 0x26, 0x2C, 0x1F,
-    1, 0, 0x13,                                                        // Normal display on, then 10 ms delay
-    1, 0, 0x29,                                                        // Main screen turn on, then wait 500 ms
-    0                                                                  // Terminate list
+    1, 0, 0x13, // Normal display on, then 10 ms delay
+    1, 0, 0x29, // Main screen turn on, then wait 500 ms
+    0           // Terminate list
 };
 
 #define UART_ID uart1
@@ -180,6 +191,37 @@ static inline void shiftout( uint16_t val,uint8_t bits) {
     gpio_put(PIN_WR, 1);
 #endif
 }
+
+#ifdef USE_LVGL
+static void do_tick_inc() {
+    lv_tick_inc(5);
+}
+
+static void my_disp_flush(lv_disp_t *disp, const lv_area_t *area, lv_color_t *color_p) {
+    int32_t x, y;
+    uint32_t w = (area->x2 - area->x1 + 1);
+    uint32_t h = (area->y2 - area->y1 + 1);
+    ili9341_openwindow(area->x1, area->y1, w,h);
+    for (y = area->y1; y <= area->y2; y++) {
+        for (x = area->x1; x <= area->x2; x++) {
+            shiftout(lv_color_to16(*color_p++), 16);
+        }
+    }
+    lv_disp_flush_ready(disp); /* Indicate you are ready with the flushing*/
+}
+
+static void init_lvgl(void) {
+    lv_init();
+    lv_disp_draw_buf_init(&draw_buf, buf1, NULL,
+                         SCREEN_WIDTH * SCREEN_HEIGHT / 10); /*Initialize the display buffer.*/
+    lv_disp_drv_init(&disp_drv);                                                     /*Basic initialization*/
+    disp_drv.flush_cb = my_disp_flush;                                               /*Set your driver function*/
+    disp_drv.draw_buf = &draw_buf;                                                   /*Assign the buffer to the display*/
+    disp_drv.hor_res = SCREEN_HEIGHT;                                                /*Set the horizontal resolution of the display*/
+    disp_drv.ver_res = SCREEN_WIDTH;                                                 /*Set the vertical resolution of the display*/
+    lv_disp_drv_register(&disp_drv);                                                 /*Finally register the driver*/
+}
+#endif
 
 static inline void lcd_send_cmd(const uint8_t cmd) {
     gpio_put(PIN_RS, 0);
@@ -376,8 +418,6 @@ int main() {
 #endif
 
     lcd_init(ili9341_init_seq);
-
-
     // Other SDKs: static image on screen, lame, boring
     // Raspberry Pi Pico SDK: spinning image on screen, bold, exciting
 
@@ -385,12 +425,20 @@ int main() {
     // coords (bits 16:9 of addr offset), and we'll represent coords with
     // 16.16 fixed point. ACCUM0,1 will contain current coord, BASE0/1 will
     // contain increment vector, and BASE2 will contain image base pointer
+#if 1
 
-#if 0
+#ifdef USE_LVGL
+    init_lvgl();
+    lv_basic_line_chart();
+    while (true) {
+        lv_task_handler();
+        sleep_ms(500);
+    }
+#else
 #include "ffmpeg_bgr565_240x320x16.h"
     /*  show static bgr565 image  */
     ili9341_show_rgb565_data(ffmpeg_bgr565_240x320x16, SCREEN_WIDTH * SCREEN_HEIGHT);
-
+#endif
 #else
 #define UNIT_LSB 16
     interp_config lane0_cfg = interp_default_config();
