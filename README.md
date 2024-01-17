@@ -149,6 +149,22 @@ static inline uint8_t lcd_74hcxxx_test(uint8_t data) {
 
 * ![images/74hc165_read_ili9341.png](images/74hc165_read_ili9341.png)
 
+
+## Enable XPT2046 and with SPI
+
+|  RP2040   | 2.8 inch SPI |    XPT2046   |
+| :-------: | :----------: | :----------: |
+|   GPIO3   |  SDI(MOSI)   |  SDI(MOSI)   |
+|   GPIO2   |     SCK      |     SCK      |
+|   GPIO0   |      DC      |              |
+|   GPIO4   |  SDO(MISO)   |  SDO(MISO)   |
+|   GPIO5   |      CS      |              |
+|   GPIO1   |    RESET     |              |
+|   GPIO8   |              |      CS      |
+|    VCC    |      BK      |              |
+|    VCC    |     VCC      |              |
+|    GND    |     GND      |              |
+
 ## Shortcomings
 
 * This project needs addidtional ICs and complex wiring. The 74HC595 and 74HC165 can only work in the bit-banging method with fixed `clock_freq`, also in `shiftout` need an extra instruction to delay, otherwise will show black screen. When tested in the PIO method, the LCD screen is block.I think it may be that the MCU is too fast and produces noise signal interference, Or violates the timing specification. At the moment I don't have enough experience in this area, maybe in the future I'll spend some time making it flexible and robust.
