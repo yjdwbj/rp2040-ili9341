@@ -209,7 +209,9 @@ void init_lvgl(void) {
     // lv_example_slider_1();
     // lv_example_slider_2();
     // lv_example_colorwheel_1();
-    lv_example_keyboard_1();
+    // lv_example_keyboard_1();
+    // lv_example_img_2();
+    lv_example_meter_2();
 #else
     cursor_obj = lv_img_create(lv_scr_act());     /*Create an image object for the cursor */
     lv_img_set_src(cursor_obj, LV_SYMBOL_GPS);    /*Set the image source*/

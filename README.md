@@ -150,7 +150,7 @@ static inline uint8_t lcd_74hcxxx_test(uint8_t data) {
 * ![images/74hc165_read_ili9341.png](images/74hc165_read_ili9341.png)
 
 
-## Enable XPT2046 and with SPI
+## Enable XPT2046 and use SPI
 
 |  RP2040   | 2.8 inch SPI |    XPT2046   |
 | :-------: | :----------: | :----------: |
@@ -164,6 +164,12 @@ static inline uint8_t lcd_74hcxxx_test(uint8_t data) {
 |    VCC    |      BK      |              |
 |    VCC    |     VCC      |              |
 |    GND    |     GND      |              |
+
+
+* Added `LVGL` examples
+
+![lvgl_exmaple1.jpg](images/lvgl_example1.jpg)
+![lvgl_meter.gif](images/lvgl_meter.gif)
 
 ## Shortcomings
 

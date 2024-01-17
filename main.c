@@ -55,10 +55,6 @@ int main() {
 
 #ifdef USE_LVGL
     init_lvgl();
-    // lv_basic_line_chart();
-    uint16_t x, y;
-    static char text[64];
-
     while (true) {
         lv_tick_inc(1);
         lv_task_handler();
