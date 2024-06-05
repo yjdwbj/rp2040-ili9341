@@ -57,6 +57,7 @@ if (USE_LVGL)
             hardware_interp
             hardware_spi
             lvgl
+            lvgl_demos
             lvgl_examples
     )
     target_sources(${PROJECT} PRIVATE

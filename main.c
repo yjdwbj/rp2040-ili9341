@@ -55,11 +55,14 @@ int main() {
 
 #ifdef USE_LVGL
     init_lvgl();
+
+    // lv_demo_widgets();
+    lv_demo_benchmark();
     while (true) {
-        lv_tick_inc(1);
-        lv_task_handler();
+        lv_timer_handler();
+        sleep_ms(1);
+        lv_tick_inc(5);
         // lv_timer_handler(); /* let the GUI do its work */
-        sleep_ms(10);
     }
 #else
 
@@ -69,6 +72,7 @@ int main() {
     ili9341_set_rotation(NORMAL);
     ili9341_draw_rgb565_data(ffmpeg_bgr565_240x320x16, sizeof(ffmpeg_bgr565_240x320x16) / sizeof(char) / 2);
 #else
+    uart_puts(UART_ID, "Runing on ili9341_draw_test mode\n");
     ili9341_draw_test();
 #endif
 #endif

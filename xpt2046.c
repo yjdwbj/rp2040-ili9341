@@ -357,7 +357,11 @@ void XPT2046_init(){
  * @param data store the read data here
  * @return false: because no ore data to be read
  */
+#if LVGL_VERSION_MAJOR >= 9
+void XPT2046_read(lv_indev_data_t *drv, lv_indev_data_t *data) {
+#else
 void XPT2046_read(lv_indev_drv_t *drv, lv_indev_data_t *data) {
+#endif
     if (getTouch(&data->point.x, &data->point.y)) {
         data->state = LV_INDEV_STATE_PR;
         uart_puts(UART_ID, "press ed \r\n");

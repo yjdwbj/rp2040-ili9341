@@ -1,6 +1,8 @@
 #include "ili9341.h"
 #include "hardware/interp.h"
+#if defined(USE_SPI)
 #include "hardware/spi.h"
+#endif
 #include "lvgl/examples/widgets/lv_example_widgets.h"
 #include "pico/binary_info.h"
 #include "raspberry_256x256_rgb565.h"
@@ -39,10 +41,21 @@ uint8_t bitOrder = MSBFIRST;
 #endif
 
 #ifdef USE_LVGL
-static lv_disp_draw_buf_t draw_buf;
-static lv_color_t buf1[SCREEN_WIDTH * SCREEN_HEIGHT / 10]; /*Declare a buffer for 1/10 screen size*/
-static lv_disp_drv_t disp_drv;                             /*Descriptor of a display driver*/
+/*LVGL draw into this buffer, 1/10 screen size usually works well. The size is in bytes*/
+#define DRAW_BUF_SIZE (SCREEN_WIDTH * SCREEN_HEIGHT / 10)
+static lv_color_t buf1[DRAW_BUF_SIZE]; /*Declare a buffer for 1/10 screen size*/
+static lv_color_t buf2[DRAW_BUF_SIZE]; /*Declare a buffer for 1/10 screen size*/
+
+#if LVGL_VERSION_MAJOR >= 9
+static lv_indev_data_t indev_drv;                          /*Descriptor of a input device driver*/
+static lv_display_t *disp_drv; /*Descriptor of a display driver*/
+
+#else
 static lv_indev_drv_t indev_drv;                           /*Descriptor of a input device driver*/
+static lv_disp_draw_buf_t draw_buf;
+static lv_disp_drv_t disp_drv; /*Descriptor of a display driver*/
+
+#endif
 #endif
 static inline void lcd_send_cmd(const uint8_t cmd);
 // Format: cmd length (including cmd byte), post delay in units of 5 ms, then cmd payload
@@ -165,17 +178,38 @@ void shiftout(uint16_t val, uint8_t bits) {
 }
 
 #ifdef USE_LVGL
-
+static void test_convert(int r, int g, int b,
+                         uint8_t *const rgb) {
+    const int rg = (r & 0xf8) | (g >> 5);
+    const int gb = ((g << 3) & 0xe0) | (b >> 3);
+#ifdef WEBP_SWAP_16BIT_CSP
+    rgb[0] = (uint8_t)gb;
+    rgb[1] = (uint8_t)rg;
+#else
+    rgb[0] = (uint8_t)rg;
+    rgb[1] = (uint8_t)gb;
+#endif
+}
+#if LVGL_VERSION_MAJOR >= 9
+static void my_disp_flush(lv_display_t *disp, const lv_area_t *area, lv_color_t *color_p) {
+#else
 static void my_disp_flush(lv_disp_t *disp, const lv_area_t *area, lv_color_t *color_p) {
+#endif
     int32_t x, y;
     uint32_t w = (area->x2 - area->x1 + 1);
     uint32_t h = (area->y2 - area->y1 + 1);
     ili9341_openwindow(area->x1, area->y1, w, h);
-    uint16_t color;
     CS_L;
+    uint16_t rgb = 0;
     for (y = area->y1; y <= area->y2; y++) {
         for (x = area->x1; x <= area->x2; x++) {
+#if LVGL_VERSION_MAJOR >= 9
+
+            shiftout(lv_color_to_u16(*color_p), 16);
+            color_p++;
+#else
             shiftout(lv_color_to16(*color_p++), 16);
+#endif
         }
     }
     CS_H;
@@ -187,16 +221,28 @@ void init_lvgl(void) {
     lv_obj_t *cursor_obj;
 
     XPT2046_init();
+
     lv_init();
+#if LVGL_VERSION_MAJOR >= 9
+    disp_drv = lv_display_create(SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    lv_display_set_flush_cb(disp_drv, my_disp_flush);
+    lv_display_set_buffers(disp_drv, buf1, buf2, sizeof(buf1),
+                           LV_DISPLAY_RENDER_MODE_PARTIAL);
+    // lv_display_set_rotation(disp_drv, LV_DISPLAY_ROTATION_90);
+
+    lv_display_set_color_format(disp_drv, LV_COLOR_FORMAT_RGB888);
+#else // The following code has been tested on lvgl 8.3.0
     lv_disp_draw_buf_init(&draw_buf, buf1, NULL,
-                          SCREEN_WIDTH * SCREEN_HEIGHT / 10); /*Initialize the display buffer.*/
+                          sizeof(buf1));                      /*Initialize the display buffer.*/
     lv_disp_drv_init(&disp_drv);                              /*Basic initialization*/
     disp_drv.flush_cb = my_disp_flush;                        /*Set your driver function*/
     disp_drv.draw_buf = &draw_buf;                            /*Assign the buffer to the display*/
     disp_drv.hor_res = SCREEN_WIDTH;                          /*Set the horizontal resolution of the display*/
     disp_drv.ver_res = SCREEN_HEIGHT;                         /*Set the vertical resolution of the display*/
     lv_disp_drv_register(&disp_drv);                          /*Finally register the driver*/
-
+#endif
+#if 0
     // init input device
     lv_indev_drv_init(&indev_drv);          /*Basic initialization*/
     indev_drv.type = LV_INDEV_TYPE_POINTER; /*Touch pad is a pointer-like device*/
@@ -216,6 +262,7 @@ void init_lvgl(void) {
     cursor_obj = lv_img_create(lv_scr_act());     /*Create an image object for the cursor */
     lv_img_set_src(cursor_obj, LV_SYMBOL_GPS);    /*Set the image source*/
     lv_indev_set_cursor(mouse_indev, cursor_obj); /*Connect the image  object to the driver*/
+#endif
 #endif
 }
 #endif
@@ -388,7 +435,9 @@ static void driver_init() {
 
 void ili9341_init() {
     driver_init();
-    uart_puts(UART_ID, "after ili9341 device initial\r\n");
+    static char text[64];
+    sprintf(text, "after ili9341 device initial,din:%d \r\n", TFT_DIN);
+    uart_puts(UART_ID, text);
     const uint8_t *cmd = &ili9341_init_seq;
     while (*cmd) {
         lcd_write_cmd(cmd + 2, *cmd);
@@ -455,7 +504,8 @@ void ili9341_draw_test() {
 
     float theta = 0.f;
     float theta_max = 2.f * (float)M_PI;
-    ili9341_openwindow(0, 0, SCREEN_HEIGHT, SCREEN_WIDTH);
+    // ili9341_openwindow(0, 0, SCREEN_HEIGHT, SCREEN_WIDTH);
+    ili9341_openwindow(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
     CS_L;
     while (1) {
         theta += 0.02f;
@@ -466,10 +516,10 @@ void ili9341_draw_test() {
             (int32_t)(sinf(theta) * (1 << UNIT_LSB)), (int32_t)(cosf(theta) * (1 << UNIT_LSB))};
         interp0->base[0] = rotate[0];
         interp0->base[1] = rotate[2];
-        for (int y = 0; y < SCREEN_WIDTH; ++y) {
+        for (int y = 0; y < SCREEN_HEIGHT; ++y) {
             interp0->accum[0] = rotate[1] * y;
             interp0->accum[1] = rotate[3] * y;
-            for (int x = 0; x < SCREEN_HEIGHT; ++x) {
+            for (int x = 0; x < SCREEN_WIDTH; ++x) {
                 uint16_t color = *(uint16_t *)(interp0->pop[2]);
                 shiftout(color, 16);
             }

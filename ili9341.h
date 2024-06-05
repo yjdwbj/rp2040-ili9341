@@ -10,8 +10,9 @@
 #define UART_ID uart0
 
 #ifdef USE_LVGL
-#include "lv_conf.h"
-#include "lvgl/lvgl.h"
+// #include "lv_conf.h"
+#include "demos/lv_demos.h"
+#include "lvgl.h"
 #include "xpt2046.h"
 #endif
 

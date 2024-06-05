@@ -13,9 +13,9 @@ Expanded with:
 
 ## Supported and tested TFT screens
 
-![ili9341_2.8inch_240x320_spi_lcd.jpg](images/ili9341_2.8inch_240x320_spi_lcd.jpg)
-![ili9341_3.2inch_240x320_16b_lcd.jpg](images/ili9341_3.2inch_240x320_16b_lcd.jpg)
-![rp2040-74hc595n-lcd.jpg](images/rp2040-74hc595n-lcd.jpg)
+![ili9341_2.8inch_240x320_spi_lcd.png](images/ili9341_2.8inch_240x320_spi_lcd.png)
+![ili9341_3.2inch_240x320_16b_lcd.png](images/ili9341_3.2inch_240x320_16b_lcd.png)
+![rp2040-74hc595n-lcd.png](images/rp2040-74hc595n-lcd.png)
 ![rp2040-with-two-lcd.gif](images/rp2040-with-two-lcd.gif)
 
 ## Logic probe timing diagram
@@ -170,6 +170,21 @@ static inline uint8_t lcd_74hcxxx_test(uint8_t data) {
 
 ![lvgl_exmaple1.jpg](images/lvgl_example1.jpg)
 ![lvgl_meter.gif](images/lvgl_meter.gif)
+
+# Third Stage， Draw the PCB adapter board
+
+* First of all, I would like to thank [www.jiepei.com/](https://www.jiepei.com/) company for supporting PCB sample production, including shipping costs. Its free sample promotion is very good for people who like DIY electronic products.
+
+![pcb_adapter_show.png](images/pcb_adapter_show.png)
+![images/pcb_adapter_3d.png](images/pcb_adapter_3d.png)
+![images/pcb_adapter_2d.png](images/pcb_adapter_2d.png)
+![pcb_74h595_convert_lv_demo_benchmark](images/pcb_74h595_convert_lv_demo_benchmark.png)
+![pcb_and_running_74h595_16b](images/pcb_and_running_74h595_16b.png)
+
+* Runing lv_demo_benchmark on lvgl v9.1
+
+![lv_demo_benchmark](images/lv_demo_benchmark.gif)
+
 
 ## Shortcomings
 
